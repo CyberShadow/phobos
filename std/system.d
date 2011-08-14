@@ -18,74 +18,52 @@
  */
 module std.system;
 
-const
+/// Operating system family
+enum OS
 {
-
-    // Operating system family
-    enum Family
-    {
-        Win32 = 1,              // Microsoft 32 bit Windows systems
-        linux,                  // all linux systems
-        OSX,
-    }
-
-    version (Win32)
-    {
-        Family family = Family.Win32;
-    }
-    else version (Posix)
-    {
-        Family family = Family.linux;
-    }
-    else version (OSX)
-    {
-        Family family = Family.OSX;
-    }
-    else
-    {
-        static assert(0);
-    }
-
-    // More specific operating system name
-    enum OS
-    {
-        Windows95 = 1,
-        Windows98,
-        WindowsME,
-        WindowsNT,
-        Windows2000,
-        WindowsXP,
-
-        RedHatLinux,
-        OSX,
-    }
-
-    /// Byte order endianness
-
-    enum Endian
-    {
-        BigEndian,      /// big endian byte order
-        LittleEndian    /// little endian byte order
-    }
-
-    version(LittleEndian)
-    {
-        /// Native system endianness
-        Endian endian = Endian.LittleEndian;
-    }
-    else
-    {
-        Endian endian = Endian.BigEndian;
-    }
+	Other,
+	Windows,                  /// Microsoft 32 bit Windows systems
+	Linux,                    /// all Linux systems
+	FreeBSD,
+	OSX,
 }
 
-// The rest should get filled in dynamically at runtime
+version (Windows)
+	const OS os = OS.Windows;
+else
+version (linux)
+	const OS os = OS.Linux;
+else
+version (FreeBSD)
+	const OS os = OS.FreeBSD;
+else
+version (OSX)
+	const OS os = OS.OSX;
+else
+	const OS os = OS.Other;
 
-OS os = OS.WindowsXP;
+/// Byte order endianness
+enum Endian
+{
+	BigEndian,      /// big endian byte order
+	LittleEndian    /// little endian byte order
+}
 
-// Operating system version as in
-// os_major.os_minor
-uint os_major = 4;
-uint os_minor = 0;
+/// Native system endianness
+version (LittleEndian)
+	const Endian endian = Endian.LittleEndian;
+else
+	const Endian endian = Endian.BigEndian;
 
+alias uint[] OSVersion;
 
+OSVersion getOSVersion()
+{
+	// return parsed version from GetVersion / uname
+	return null;
+}
+
+enum OSVersion_Windows2000 = [5, 0];
+enum OSVersion_WindowsXP = [5, 1];
+enum OSVersion_WindowsVista = [6, 0];
+enum OSVersion_Windows7 = [6, 1];
