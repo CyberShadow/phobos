@@ -24,7 +24,7 @@ import core.stdc.errno, core.stdc.stddef, core.stdc.stdlib, core.memory,
     core.stdc.string, core.stdc.wchar_, core.exception;
 import std.range;
 import std.traits : Unqual, isSomeChar, isAggregateType, isSomeString,
-    isIntegral, isBoolean, ParameterTypeTuple;
+    isIntegral, isBoolean, ParameterTypeTuple, hasIndirections;
 
 version (CRuntime_Microsoft)
 {
@@ -1178,7 +1178,7 @@ Throws: $(D Exception) if the file is not opened.
             }
             else static if (isSomeString!A)
             {
-                put(w, arg);
+                .put(w, arg);
             }
             else static if (isIntegral!A)
             {
@@ -1188,11 +1188,11 @@ Throws: $(D Exception) if the file is not opened.
             }
             else static if (isBoolean!A)
             {
-                put(w, arg ? "true" : "false");
+                .put(w, arg ? "true" : "false");
             }
             else static if (isSomeChar!A)
             {
-                put(w, arg);
+                .put(w, arg);
             }
             else
             {
@@ -2404,6 +2404,103 @@ See $(LREF byChunk) for an example.
         return LockingTextWriter(this);
     }
 
+/**
+Implements the output range $(D put) primitive.
+Can be used with $(XREF range,_put) and $(XREF algorithm,copy)
+to write ranges to a $(D File).
+
+Example:
+Produce a grayscale image of the $(LUCKY Mandelbrot set)
+in binary $(LUCKY Netpbm format) to standard output.
+---
+import std.algorithm, std.range, std.stdio;
+
+void main()
+{
+    enum size = 500;
+    writefln("P5\n%d %d %d", size, size, ubyte.max);
+
+    iota(-1, 3, 2.0/size).map!(y =>
+        iota(-1.5, 0.5, 2.0/size).map!(x =>
+            cast(ubyte)(1+
+                recurrence!((a, n) => x + y*1i + a[n-1]^^2)(0+0i)
+                .take(ubyte.max)
+                .countUntil!(z => z.re^^2 + z.im^^2 > 4))
+        )
+    )
+    .copy(stdout);
+}
+---
+*/
+    void put(T)(auto ref in T value)
+        if (!hasIndirections!T
+         && !isInputRange!T)
+    {
+        rawWrite((&value)[0..1]);
+    }
+
+    /// ditto
+    void put(T)(in T[] array)
+        if (!hasIndirections!T
+         && !isInputRange!T)
+    {
+        rawWrite(array);
+    }
+
+    unittest
+    {
+        import std.algorithm : copy;
+        static import std.file;
+        import std.exception : collectException;
+
+        auto deleteme = testFilename();
+        scope(exit) collectException(std.file.remove(deleteme));
+        auto output = File(deleteme, "wb");
+        auto input = File(deleteme, "rb");
+
+        T[] readExact(T)(T[] buf)
+        {
+            auto result = input.rawRead(buf);
+            assert(result.length == buf.length);
+            return result;
+        }
+
+        // test raw values
+        ubyte byteIn = 42;
+        byteIn.only.copy(output); output.flush();
+        ubyte byteOut = readExact(new ubyte[1])[0];
+        assert(byteIn == byteOut);
+
+        // test arrays
+        ubyte[] bytesIn = [1, 2, 3, 4, 5];
+        bytesIn.copy(output); output.flush();
+        ubyte[] bytesOut = readExact(new ubyte[bytesIn.length]);
+        scope(failure) .writeln(bytesOut);
+        assert(bytesIn == bytesOut);
+
+        // test ranges of values
+        bytesIn.retro.copy(output); output.flush();
+        bytesOut = readExact(bytesOut);
+        bytesOut.reverse;
+        assert(bytesIn == bytesOut);
+
+        // test string
+        "foobar".copy(output); output.flush();
+        char[] charsOut = readExact(new char[6]);
+        assert(charsOut == "foobar");
+
+        // test ranges of arrays
+        only("foo", "bar").copy(output); output.flush();
+        charsOut = readExact(charsOut);
+        assert(charsOut == "foobar");
+
+        // test that we are writing arrays as is,
+        // without UTF-8 transcoding
+        "foo"d.copy(output); output.flush();
+        dchar[] dcharsOut = readExact(new dchar[3]);
+        assert(dcharsOut == "foo");
+    }
+
 /// Get the size of the file, ulong.max if file is not searchable, but still throws if an actual error occurs.
     @property ulong size() @safe
     {
@@ -3607,6 +3704,30 @@ unittest
         ++i;
     }
     f.close();
+}
+
+
+/**
+Writes an array or range to a file.
+Shorthand for $(D data.copy(File(fileName, "wb"))).
+Similar to $(XREF file,write), strings are written as-is,
+rather than encoded according to the $(D File)'s orientation.
+*/
+void toFile(T)(T data, string fileName)
+    if (is(typeof(std.range.copy(data, stdout))))
+{
+    std.range.copy(data, File(fileName, "wb"));
+}
+
+unittest
+{
+    static import std.file;
+
+    auto deleteme = testFilename();
+    scope(exit) { std.file.remove(deleteme); }
+
+    "Test".toFile(deleteme);
+    assert(std.file.readText(deleteme) == "Test");
 }
 
 /*********************

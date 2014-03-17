@@ -378,6 +378,7 @@ void main()
    assert(cast(int[]) read("filename") == a);
 }
 ----
+See_also: $(XREF stdio,toFile)
  */
 void write(in char[] name, const void[] buffer) @trusted
 {
