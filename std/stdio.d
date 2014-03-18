@@ -17,8 +17,6 @@ Authors:   $(WEB digitalmars.com, Walter Bright),
 module std.stdio;
 
 public import core.stdc.stdio, std.string : KeepTerminator;
-import core.vararg;
-static import std.c.stdio;
 import std.stdiobase;
 import core.stdc.errno, core.stdc.stddef, core.stdc.stdlib, core.memory,
     core.stdc.string, core.stdc.wchar_, core.exception;
@@ -1521,7 +1519,7 @@ Returns the $(D FILE*) corresponding to this object.
 
     unittest
     {
-        assert(stdout.getFP() == std.c.stdio.stdout);
+        assert(stdout.getFP() == core.stdc.stdio.stdout);
     }
 
 /**
@@ -3714,9 +3712,9 @@ Similar to $(XREF file,write), strings are written as-is,
 rather than encoded according to the $(D File)'s orientation.
 */
 void toFile(T)(T data, string fileName)
-    if (is(typeof(std.range.copy(data, stdout))))
+    if (is(typeof(std.algorithm.copy(data, stdout))))
 {
-    std.range.copy(data, File(fileName, "wb"));
+    std.algorithm.copy(data, File(fileName, "wb"));
 }
 
 unittest
