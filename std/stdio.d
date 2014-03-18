@@ -2224,9 +2224,14 @@ $(D Range) that locks the file and allows fast writing to it.
     struct LockingTextWriter
     {
     private:
-        FILE* fps_;          // the shared file handle
-        _iobuf* handle_;     // the unshared version of fps
-        int orientation_;
+        // the shared file handle
+        FILE* fps_;
+
+        // the unshared version of fps
+        @property _iobuf* handle_() { return cast(_iobuf*)fps_; }
+
+        // the file's orientation (byte- or wide-oriented)
+       	int orientation_;
     public:
         deprecated("accessing fps/handle/orientation directly can break LockingTextWriter integrity")
         {
@@ -2243,7 +2248,6 @@ $(D Range) that locks the file and allows fast writing to it.
             fps_ = f._p.handle;
             orientation_ = fwide(fps_, 0);
             FLOCK(fps_);
-            handle_ = cast(_iobuf*)fps_;
         }
 
         ~this() @trusted
@@ -2252,7 +2256,6 @@ $(D Range) that locks the file and allows fast writing to it.
             {
                 FUNLOCK(fps_);
                 fps_ = null;
-                handle_ = null;
             }
         }
 
@@ -2402,6 +2405,109 @@ See $(LREF byChunk) for an example.
         return LockingTextWriter(this);
     }
 
+	// An output range which optionally locks the file and puts it into
+	// binary mode (similar to rawWrite). Because it needs to restore
+	// the file mode on destruction, it is RefCounted on Windows.
+	struct BinaryWriterImpl(bool locking)
+	{
+        FILE* fps;
+        string name;
+
+        version(Windows)
+        {
+        	int fd, oldMode;
+        	version(DIGITAL_MARS_STDIO)
+        		ubyte oldInfo;
+        }
+
+        this(ref File f)
+        {
+            import std.exception : enforce;
+
+            enforce(f._p && f._p.handle);
+            name = f._name;
+            fps = f._p.handle;
+            static if (locking)
+            	FLOCK(fps);
+
+	        version(Windows)
+	        {
+	            .fflush(fps); // before changing translation mode
+	            fd = ._fileno(fps);
+	            oldMode = ._setmode(fd, _O_BINARY);
+	            version(DIGITAL_MARS_STDIO)
+	            {
+	                // @@@BUG@@@ 4243
+	                oldInfo = __fhnd_info[fd];
+	                __fhnd_info[fd] &= ~FHND_TEXT;
+	            }
+	        }
+        }
+
+        ~this()
+        {
+            if(fps)
+            {
+                version(Windows)
+                {
+					.fflush(fps); // before restoring translation mode
+					version(DIGITAL_MARS_STDIO)
+					{
+						// @@@BUG@@@ 4243
+						__fhnd_info[fd] = oldInfo;
+					}
+					._setmode(fd, oldMode);
+                }
+
+                FUNLOCK(fps);
+                fps = null;
+            }
+        }
+
+        void rawWrite(T)(in T[] buffer)
+        {
+	        import std.conv : text;
+	        import std.exception : errnoEnforce;
+
+	        auto result =
+	            .fwrite(buffer.ptr, T.sizeof, buffer.length, fps);
+	        if (result == result.max) result = 0;
+	        errnoEnforce(result == buffer.length,
+	                text("Wrote ", result, " instead of ", buffer.length,
+	                        " objects of type ", T.stringof, " to file `",
+	                        name, "'"));
+        }
+
+        version (Windows)
+        {
+        	@disable this(this);
+        }
+        else
+        {
+	        this(this)
+	        {
+	            if(fps)
+	            {
+	                FLOCK(fps);
+	            }
+	        }
+	    }
+
+	    void put(T)(auto ref in T value)
+//	        if (!hasIndirections!T
+//	         && !isInputRange!T)
+	    {
+	        rawWrite((&value)[0..1]);
+	    }
+
+	    void put(T)(in T[] array)
+	        if (!hasIndirections!T
+	         && !isInputRange!T)
+	    {
+	        rawWrite(array);
+	    }
+	}
+
 /**
 Implements the output range $(D put) primitive.
 Can be used with $(XREF range,_put) and $(XREF algorithm,copy)
@@ -2430,19 +2536,27 @@ void main()
 }
 ---
 */
-    void put(T)(auto ref in T value)
-        if (!hasIndirections!T
-         && !isInputRange!T)
-    {
-        rawWrite((&value)[0..1]);
-    }
+/** Returns an output range that locks the file and allows fast writing to it.
 
-    /// ditto
-    void put(T)(in T[] array)
-        if (!hasIndirections!T
-         && !isInputRange!T)
+See $(LREF byChunk) for an example.
+*/
+    auto lockingBinaryWriter()
     {
-        rawWrite(array);
+		alias LockingBinaryWriterImpl = BinaryWriterImpl!true;
+
+		version(Windows)
+		{
+	    	import std.typecons : RefCounted;
+	    	alias LockingBinaryWriter = RefCounted!LockingBinaryWriterImpl;
+	    }
+	    else
+	    	alias LockingBinaryWriter = LockingBinaryWriterImpl;
+
+	    //static assert(isOutputRange!(LockingBinaryWriter, ubyte));
+	    import std.traits;
+	    //static assert(hasMember!(LockingBinaryWriter, "put"));
+
+        return LockingBinaryWriter(this);
     }
 
     unittest
@@ -2454,6 +2568,7 @@ void main()
         auto deleteme = testFilename();
         scope(exit) collectException(std.file.remove(deleteme));
         auto output = File(deleteme, "wb");
+        auto writer = output.lockingBinaryWriter();
         auto input = File(deleteme, "rb");
 
         T[] readExact(T)(T[] buf)
@@ -2465,36 +2580,37 @@ void main()
 
         // test raw values
         ubyte byteIn = 42;
-        byteIn.only.copy(output); output.flush();
+put(writer, byteIn);
+        byteIn.only.copy(writer); output.flush();
         ubyte byteOut = readExact(new ubyte[1])[0];
         assert(byteIn == byteOut);
 
         // test arrays
         ubyte[] bytesIn = [1, 2, 3, 4, 5];
-        bytesIn.copy(output); output.flush();
+        bytesIn.copy(writer); output.flush();
         ubyte[] bytesOut = readExact(new ubyte[bytesIn.length]);
         scope(failure) .writeln(bytesOut);
         assert(bytesIn == bytesOut);
 
         // test ranges of values
-        bytesIn.retro.copy(output); output.flush();
+        bytesIn.retro.copy(writer); output.flush();
         bytesOut = readExact(bytesOut);
         bytesOut.reverse;
         assert(bytesIn == bytesOut);
 
         // test string
-        "foobar".copy(output); output.flush();
+        "foobar".copy(writer); output.flush();
         char[] charsOut = readExact(new char[6]);
         assert(charsOut == "foobar");
 
         // test ranges of arrays
-        only("foo", "bar").copy(output); output.flush();
+        only("foo", "bar").copy(writer); output.flush();
         charsOut = readExact(charsOut);
         assert(charsOut == "foobar");
 
         // test that we are writing arrays as is,
         // without UTF-8 transcoding
-        "foo"d.copy(output); output.flush();
+        "foo"d.copy(writer); output.flush();
         dchar[] dcharsOut = readExact(new dchar[3]);
         assert(dcharsOut == "foo");
     }
