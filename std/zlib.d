@@ -301,7 +301,9 @@ class Compress
         if (inited)
         {
             inited = 0;
-            deflateEnd(&zs);
+            try
+                deflateEnd(&zs);
+            catch (ZlibException e) {}
         }
     }
 
@@ -459,7 +461,9 @@ class UnCompress
         if (inited)
         {
             inited = 0;
-            inflateEnd(&zs);
+            try
+                inflateEnd(&zs);
+            catch (ZlibException e) {}
         }
         done = 1;
     }
