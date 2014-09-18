@@ -2231,7 +2231,7 @@ $(D Range) that locks the file and allows fast writing to it.
         @property _iobuf* handle_() { return cast(_iobuf*)fps_; }
 
         // the file's orientation (byte- or wide-oriented)
-       	int orientation_;
+        int orientation_;
     public:
         deprecated("accessing fps/handle/orientation directly can break LockingTextWriter integrity")
         {
@@ -2405,19 +2405,20 @@ See $(LREF byChunk) for an example.
         return LockingTextWriter(this);
     }
 
-	// An output range which optionally locks the file and puts it into
-	// binary mode (similar to rawWrite). Because it needs to restore
-	// the file mode on destruction, it is RefCounted on Windows.
-	struct BinaryWriterImpl(bool locking)
-	{
+    // An output range which optionally locks the file and puts it into
+    // binary mode (similar to rawWrite). Because it needs to restore
+    // the file mode on destruction, it is RefCounted on Windows.
+    struct BinaryWriterImpl(bool locking)
+    {
+    private:
         FILE* fps;
         string name;
 
         version(Windows)
         {
-        	int fd, oldMode;
-        	version(DIGITAL_MARS_STDIO)
-        		ubyte oldInfo;
+            int fd, oldMode;
+            version(DIGITAL_MARS_STDIO)
+                ubyte oldInfo;
         }
 
         this(ref File f)
@@ -2428,20 +2429,20 @@ See $(LREF byChunk) for an example.
             name = f._name;
             fps = f._p.handle;
             static if (locking)
-            	FLOCK(fps);
+                FLOCK(fps);
 
-	        version(Windows)
-	        {
-	            .fflush(fps); // before changing translation mode
-	            fd = ._fileno(fps);
-	            oldMode = ._setmode(fd, _O_BINARY);
-	            version(DIGITAL_MARS_STDIO)
-	            {
-	                // @@@BUG@@@ 4243
-	                oldInfo = __fhnd_info[fd];
-	                __fhnd_info[fd] &= ~FHND_TEXT;
-	            }
-	        }
+            version(Windows)
+            {
+                .fflush(fps); // before changing translation mode
+                fd = ._fileno(fps);
+                oldMode = ._setmode(fd, _O_BINARY);
+                version(DIGITAL_MARS_STDIO)
+                {
+                    // @@@BUG@@@ 4243
+                    oldInfo = __fhnd_info[fd];
+                    __fhnd_info[fd] &= ~FHND_TEXT;
+                }
+            }
         }
 
         ~this()
@@ -2450,13 +2451,13 @@ See $(LREF byChunk) for an example.
             {
                 version(Windows)
                 {
-					.fflush(fps); // before restoring translation mode
-					version(DIGITAL_MARS_STDIO)
-					{
-						// @@@BUG@@@ 4243
-						__fhnd_info[fd] = oldInfo;
-					}
-					._setmode(fd, oldMode);
+                    .fflush(fps); // before restoring translation mode
+                    version(DIGITAL_MARS_STDIO)
+                    {
+                        // @@@BUG@@@ 4243
+                        __fhnd_info[fd] = oldInfo;
+                    }
+                    ._setmode(fd, oldMode);
                 }
 
                 FUNLOCK(fps);
@@ -2464,49 +2465,50 @@ See $(LREF byChunk) for an example.
             }
         }
 
+    public:
         void rawWrite(T)(in T[] buffer)
         {
-	        import std.conv : text;
-	        import std.exception : errnoEnforce;
+            import std.conv : text;
+            import std.exception : errnoEnforce;
 
-	        auto result =
-	            .fwrite(buffer.ptr, T.sizeof, buffer.length, fps);
-	        if (result == result.max) result = 0;
-	        errnoEnforce(result == buffer.length,
-	                text("Wrote ", result, " instead of ", buffer.length,
-	                        " objects of type ", T.stringof, " to file `",
-	                        name, "'"));
+            auto result =
+                .fwrite(buffer.ptr, T.sizeof, buffer.length, fps);
+            if (result == result.max) result = 0;
+            errnoEnforce(result == buffer.length,
+                    text("Wrote ", result, " instead of ", buffer.length,
+                            " objects of type ", T.stringof, " to file `",
+                            name, "'"));
         }
 
         version (Windows)
         {
-        	@disable this(this);
+            @disable this(this);
         }
         else
         {
-	        this(this)
-	        {
-	            if(fps)
-	            {
-	                FLOCK(fps);
-	            }
-	        }
-	    }
+            this(this)
+            {
+                if(fps)
+                {
+                    FLOCK(fps);
+                }
+            }
+        }
 
-	    void put(T)(auto ref in T value)
-//	        if (!hasIndirections!T
-//	         && !isInputRange!T)
-	    {
-	        rawWrite((&value)[0..1]);
-	    }
+        void put(T)(auto ref in T value)
+//          if (!hasIndirections!T
+//           && !isInputRange!T)
+        {
+            rawWrite((&value)[0..1]);
+        }
 
-	    void put(T)(in T[] array)
-	        if (!hasIndirections!T
-	         && !isInputRange!T)
-	    {
-	        rawWrite(array);
-	    }
-	}
+        void put(T)(in T[] array)
+            if (!hasIndirections!T
+             && !isInputRange!T)
+        {
+            rawWrite(array);
+        }
+    }
 
 /**
 Implements the output range $(D put) primitive.
@@ -2536,25 +2538,30 @@ void main()
 }
 ---
 */
+    void put(T)(auto ref T t)
+    {
+        static assert(false, "TODO: implement me");
+    }
+
 /** Returns an output range that locks the file and allows fast writing to it.
 
 See $(LREF byChunk) for an example.
 */
     auto lockingBinaryWriter()
     {
-		alias LockingBinaryWriterImpl = BinaryWriterImpl!true;
+        alias LockingBinaryWriterImpl = BinaryWriterImpl!true;
 
-		version(Windows)
-		{
-	    	import std.typecons : RefCounted;
-	    	alias LockingBinaryWriter = RefCounted!LockingBinaryWriterImpl;
-	    }
-	    else
-	    	alias LockingBinaryWriter = LockingBinaryWriterImpl;
+        version(Windows)
+        {
+            import std.typecons : RefCounted;
+            alias LockingBinaryWriter = RefCounted!LockingBinaryWriterImpl;
+        }
+        else
+            alias LockingBinaryWriter = LockingBinaryWriterImpl;
 
-	    //static assert(isOutputRange!(LockingBinaryWriter, ubyte));
-	    import std.traits;
-	    //static assert(hasMember!(LockingBinaryWriter, "put"));
+        //static assert(isOutputRange!(LockingBinaryWriter, ubyte));
+        import std.traits;
+        //static assert(hasMember!(LockingBinaryWriter, "put"));
 
         return LockingBinaryWriter(this);
     }
@@ -3825,7 +3832,9 @@ unittest
 Writes an array or range to a file.
 Shorthand for $(D data.copy(File(fileName, "wb"))).
 Similar to $(XREF file,write), strings are written as-is,
-rather than encoded according to the $(D File)'s orientation.
+rather than encoded according to the $(D File)'s $(WEB
+en.cppreference.com/w/c/io#Narrow_and_wide_orientation,
+orientation).
 */
 void toFile(T)(T data, string fileName)
     if (is(typeof(std.algorithm.copy(data, stdout))))
