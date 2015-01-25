@@ -129,7 +129,7 @@ ifneq (,$(filter cc% gcc% clang% icc% egcc%, $(CC)))
 endif
 
 # Set DFLAGS
-DFLAGS=-I$(DRUNTIME_PATH)/import $(DMDEXTRAFLAGS) -w -m$(MODEL) $(PIC)
+DFLAGS=-I$(DRUNTIME_PATH)/import $(DMDEXTRAFLAGS) -w -m$(MODEL) $(PIC) -g -gs
 ifeq ($(BUILD),debug)
 	DFLAGS += -g -debug
 else
