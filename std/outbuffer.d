@@ -1,29 +1,26 @@
 // Written in the D programming language.
 
 /**
+Serialize data to $(D ubyte) arrays.
+
  * Macros:
  *      WIKI = Phobos/StdOutbuffer
  *
- * Copyright: Copyright Digital Mars 2000 - 2009.
- * License:   <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
+ * Copyright: Copyright Digital Mars 2000 - 2015.
+ * License:   $(WEB www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Authors:   $(WEB digitalmars.com, Walter Bright)
  * Source:    $(PHOBOSSRC std/_outbuffer.d)
- */
-/*          Copyright Digital Mars 2000 - 2009.
- * Distributed under the Boost Software License, Version 1.0.
- *    (See accompanying file LICENSE_1_0.txt or copy at
- *          http://www.boost.org/LICENSE_1_0.txt)
  */
 module std.outbuffer;
 
 private
 {
     import core.memory;
+    import core.stdc.stdarg;
+    import core.stdc.stdio;
+    import core.stdc.stdlib;
     import std.algorithm;
     import std.string;
-    import std.c.stdio;
-    import std.c.stdlib;
-    import std.c.stdarg;
 }
 
 /*********************************************
@@ -33,6 +30,7 @@ private
  * OutBuffer's byte order is the format native to the computer.
  * To control the byte order (endianness), use a class derived
  * from OutBuffer.
+ * OutBuffer's internal buffer is allocated with the GC.
  */
 
 class OutBuffer
@@ -46,6 +44,8 @@ class OutBuffer
         assert(offset <= data.length);
     }
 
+  pure nothrow @safe
+  {
     this()
     {
         //printf("in OutBuffer constructor\n");
@@ -66,7 +66,7 @@ class OutBuffer
      */
 
 
-    void reserve(size_t nbytes)
+    void reserve(size_t nbytes) @trusted
         in
         {
             assert(offset + nbytes >= offset);
@@ -85,6 +85,11 @@ class OutBuffer
             }
         }
 
+    /**********************************
+     * put enables OutBuffer to be used as an OutputRange.
+     */
+    alias write put;
+
     /*************************************
      * Append data to the internal buffer.
      */
@@ -96,12 +101,12 @@ class OutBuffer
             offset += bytes.length;
         }
 
-    void write(in wchar[] chars)
+    void write(in wchar[] chars) @trusted
         {
         write(cast(ubyte[]) chars);
         }
 
-    void write(const(dchar)[] chars)
+    void write(const(dchar)[] chars) @trusted
         {
         write(cast(ubyte[]) chars);
         }
@@ -117,7 +122,7 @@ class OutBuffer
     void write(char c) { write(cast(ubyte)c); }         /// ditto
     void write(dchar c) { write(cast(uint)c); }         /// ditto
 
-    void write(ushort w)                /// ditto
+    void write(ushort w) @trusted                /// ditto
     {
         reserve(ushort.sizeof);
         *cast(ushort *)&data[offset] = w;
@@ -126,14 +131,14 @@ class OutBuffer
 
     void write(short s) { write(cast(ushort)s); }               /// ditto
 
-    void write(wchar c)         /// ditto
+    void write(wchar c) @trusted        /// ditto
     {
         reserve(wchar.sizeof);
         *cast(wchar *)&data[offset] = c;
         offset += wchar.sizeof;
     }
 
-    void write(uint w)          /// ditto
+    void write(uint w) @trusted         /// ditto
     {
         reserve(uint.sizeof);
         *cast(uint *)&data[offset] = w;
@@ -142,7 +147,7 @@ class OutBuffer
 
     void write(int i) { write(cast(uint)i); }           /// ditto
 
-    void write(ulong l)         /// ditto
+    void write(ulong l) @trusted         /// ditto
     {
         reserve(ulong.sizeof);
         *cast(ulong *)&data[offset] = l;
@@ -151,35 +156,31 @@ class OutBuffer
 
     void write(long l) { write(cast(ulong)l); }         /// ditto
 
-    void write(float f)         /// ditto
+    void write(float f) @trusted         /// ditto
     {
         reserve(float.sizeof);
         *cast(float *)&data[offset] = f;
         offset += float.sizeof;
     }
 
-    void write(double f)                /// ditto
+    void write(double f) @trusted               /// ditto
     {
         reserve(double.sizeof);
         *cast(double *)&data[offset] = f;
         offset += double.sizeof;
     }
 
-    void write(real f)          /// ditto
+    void write(real f) @trusted         /// ditto
     {
         reserve(real.sizeof);
         *cast(real *)&data[offset] = f;
         offset += real.sizeof;
     }
 
-    void write(in char[] s)             /// ditto
+    void write(in char[] s) @trusted             /// ditto
     {
         write(cast(ubyte[])s);
     }
-    // void write(immutable(char)[] s)          /// ditto
-    // {
-    //     write(cast(ubyte[])s);
-    // }
 
     void write(OutBuffer buf)           /// ditto
     {
@@ -243,21 +244,24 @@ class OutBuffer
      * Convert internal buffer to array of chars.
      */
 
-    override string toString()
+    override string toString() const
     {
         //printf("OutBuffer.toString()\n");
         return cast(string) data[0 .. offset].idup;
     }
+  }
 
     /*****************************************
      * Append output of C's vprintf() to internal buffer.
      */
 
-    void vprintf(string format, va_list args)
+    void vprintf(string format, va_list args) @trusted nothrow
     {
         char[128] buffer;
         int count;
 
+        // Can't use `tempCString()` here as it will result in compilation error:
+        // "cannot mix core.std.stdlib.alloca() and exception handling".
         auto f = toStringz(format);
         auto p = buffer.ptr;
         auto psize = buffer.length;
@@ -306,26 +310,12 @@ class OutBuffer
      * Append output of C's printf() to internal buffer.
      */
 
-    void printf(string format, ...)
+    void printf(string format, ...) @trusted
     {
-        version (Win64)
-        {
-            vprintf(format, _argptr);
-        }
-        else version (X86_64)
-        {
-            va_list ap;
-            va_start(ap, __va_argsave);
-            vprintf(format, ap);
-            va_end(ap);
-        }
-        else
-        {
-            va_list ap;
-            ap = cast(va_list)&format;
-            ap += format.sizeof;
-            vprintf(format, ap);
-        }
+        va_list ap;
+        va_start(ap, format);
+        vprintf(format, ap);
+        va_end(ap);
     }
 
     /*****************************************
@@ -333,7 +323,7 @@ class OutBuffer
      * all data past index.
      */
 
-    void spread(size_t index, size_t nbytes)
+    void spread(size_t index, size_t nbytes) pure nothrow @safe
         in
         {
             assert(index <= offset);
@@ -368,4 +358,27 @@ unittest
     //auto s = buf.toString();
     //printf("buf = '%.*s'\n", s.length, s.ptr);
     assert(cmp(buf.toString(), "hello world 6") == 0);
+}
+
+unittest
+{
+    import std.range;
+    static assert(isOutputRange!(OutBuffer, char));
+
+    import std.algorithm;
+  {
+    OutBuffer buf = new OutBuffer();
+    "hello".copy(buf);
+    assert(buf.toBytes() == "hello");
+  }
+  {
+    OutBuffer buf = new OutBuffer();
+    "hello"w.copy(buf);
+    assert(buf.toBytes() == "h\x00e\x00l\x00l\x00o\x00");
+  }
+  {
+    OutBuffer buf = new OutBuffer();
+    "hello"d.copy(buf);
+    assert(buf.toBytes() == "h\x00\x00\x00e\x00\x00\x00l\x00\x00\x00l\x00\x00\x00o\x00\x00\x00");
+  }
 }

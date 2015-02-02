@@ -22,6 +22,11 @@ module std.internal.math.gammafunction;
 import std.internal.math.errorfunction;
 import std.math;
 
+pure:
+nothrow:
+@safe:
+@nogc:
+
 private {
 
 enum real SQRT2PI = 2.50662827463100050242E0L; // sqrt(2pi)
@@ -490,7 +495,7 @@ unittest {
     assert(logGamma(-real.min_normal*real.epsilon) == real.infinity);
 
     // x, correct loggamma(x), correct d/dx loggamma(x).
-    static real[] testpoints = [
+    immutable static real[] testpoints = [
     8.0L,                    8.525146484375L      + 1.48766904143001655310E-5,   2.01564147795560999654E0L,
     8.99993896484375e-1L,    6.6375732421875e-2L  + 5.11505711292524166220E-6L, -7.54938684259372234258E-1,
     7.31597900390625e-1L,    2.2369384765625e-1   + 5.21506341809849792422E-6L, -1.13355566660398608343E0L,
@@ -1498,13 +1503,12 @@ done:
     return y;
 }
 
-version(unittest) import core.stdc.stdio;
 unittest {
     // Exact values
     assert(digamma(1)== -EULERGAMMA);
     assert(feqrel(digamma(0.25), -PI/2 - 3* LN2 - EULERGAMMA) >= real.mant_dig-7);
     assert(feqrel(digamma(1.0L/6), -PI/2 *sqrt(3.0L) - 2* LN2 -1.5*log(3.0L) - EULERGAMMA) >= real.mant_dig-7);
-    assert(digamma(-5).isNaN);
+    assert(digamma(-5).isNaN());
     assert(feqrel(digamma(2.5), -EULERGAMMA - 2*LN2 + 2.0 + 2.0L/3) >= real.mant_dig-9);
     assert(isIdentical(digamma(NaN(0xABC)), NaN(0xABC)));
 

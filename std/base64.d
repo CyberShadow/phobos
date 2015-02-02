@@ -44,22 +44,20 @@
 module std.base64;
 
 import std.exception;  // enforce
-import std.range;      // isInputRange, isOutputRange, isForwardRange, ElementType, hasLength
+import std.range.primitives;      // isInputRange, isOutputRange, isForwardRange, ElementType, hasLength
 import std.traits;     // isArray
-
-version(unittest) import std.algorithm, std.conv, std.file, std.stdio;
 
 
 /**
  * The Base64
  */
-alias Base64Impl!('+', '/') Base64;
+alias Base64 = Base64Impl!('+', '/');
 
 
 /**
  * The "URL and Filename safe" Base64
  */
-alias Base64Impl!('-', '_') Base64URL;
+alias Base64URL = Base64Impl!('-', '_');
 
 
 /**
@@ -67,8 +65,8 @@ alias Base64Impl!('-', '_') Base64URL;
  *
  * Example:
  * -----
- * alias Base64Impl!('+', '/')                   Base64;    // The Base64 format(Already defined).
- * alias Base64Impl!('!', '=', Base64.NoPadding) Base64Re;  // non-standard Base64 format for Regular expression
+ * alias Base64   = Base64Impl!('+', '/');                    // The Base64 format(Already defined).
+ * alias Base64Re = Base64Impl!('!', '=', Base64.NoPadding);  // non-standard Base64 format for Regular expression
  * -----
  *
  * NOTE:
@@ -1422,7 +1420,12 @@ class Base64Exception : Exception
 
 unittest
 {
-    alias Base64Impl!('!', '=', Base64.NoPadding) Base64Re;
+    import std.algorithm : sort, equal;
+    import std.conv;
+    import std.file;
+    import std.stdio;
+
+    alias Base64Re = Base64Impl!('!', '=', Base64.NoPadding);
 
     // Test vectors from RFC 4648
     ubyte[][string] tv = [
@@ -1527,6 +1530,8 @@ unittest
     }
 
     { // with OutputRange
+        import std.array;
+
         auto a = Appender!(char[])([]);
         auto b = Appender!(ubyte[])([]);
 
@@ -1579,15 +1584,16 @@ unittest
 
     { // Encoder and Decoder
         {
-            std.file.write("testingEncoder", "\nf\nfo\nfoo\nfoob\nfooba\nfoobar");
+            string encode_file = std.file.deleteme ~ "-testingEncoder";
+            std.file.write(encode_file, "\nf\nfo\nfoo\nfoob\nfooba\nfoobar");
 
             auto witness = ["", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy"];
-            auto f = File("testingEncoder");
+            auto f = File(encode_file);
             scope(exit)
             {
                 f.close();
                 assert(!f.isOpen);
-                std.file.remove("testingEncoder");
+                std.file.remove(encode_file);
             }
 
             size_t i;
@@ -1598,15 +1604,16 @@ unittest
         }
 
         {
-            std.file.write("testingDecoder", "\nZg==\nZm8=\nZm9v\nZm9vYg==\nZm9vYmE=\nZm9vYmFy");
+            string decode_file = std.file.deleteme ~ "-testingDecoder";
+            std.file.write(decode_file, "\nZg==\nZm8=\nZm9v\nZm9vYg==\nZm9vYmE=\nZm9vYmFy");
 
-            auto witness = tv.keys.sort;
-            auto f = File("testingDecoder");
+            auto witness = sort(tv.keys);
+            auto f = File(decode_file);
             scope(exit)
             {
                 f.close();
                 assert(!f.isOpen);
-                std.file.remove("testingDecoder");
+                std.file.remove(decode_file);
             }
 
             size_t i;
@@ -1618,7 +1625,7 @@ unittest
 
         { // ForwardRange
             {
-                auto encoder = Base64.encoder(tv.values.sort);
+                auto encoder = Base64.encoder(sort(tv.values));
                 auto witness = ["", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy"];
                 size_t i;
 
@@ -1632,7 +1639,7 @@ unittest
 
             {
                 auto decoder = Base64.decoder(["", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy"]);
-                auto witness = tv.values.sort;
+                auto witness = sort(tv.values);
                 size_t i;
 
                 assert(decoder.front == witness[i++]); decoder.popFront();
@@ -1646,7 +1653,7 @@ unittest
     }
 
     { // Encoder and Decoder for single character encoding and decoding
-        alias Base64Impl!('+', '/', Base64.NoPadding) Base64NoPadding;
+        alias Base64NoPadding = Base64Impl!('+', '/', Base64.NoPadding);
 
         auto tests = [
             ""       : ["", "", "", ""],
