@@ -1,6 +1,6 @@
 // Written in the D programming language.
 /**
-This is a submodule of $(LINK2 std_algorithm_package.html, std.algorithm).
+This is a submodule of $(LINK2 std_algorithm.html, std.algorithm).
 It contains generic _comparison algorithms.
 
 $(BOOKTABLE Cheat Sheet,
@@ -1204,6 +1204,7 @@ MaxType!T max(T...)(T args)
         auto b = max(args[($+1)/2 .. $]);
     alias typeof(b) T1;
 
+    import std.algorithm.internal : algoFormat;
     static assert (is(typeof(a < b)),
         algoFormat("Invalid arguments: Cannot compare types %s and %s.", T0.stringof, T1.stringof));
 
@@ -1311,6 +1312,7 @@ MinType!T min(T...)(T args)
         auto b = min(args[($+1)/2 .. $]);
     alias typeof(b) T1;
 
+    import std.algorithm.internal : algoFormat;
     static assert (is(typeof(a < b)),
         algoFormat("Invalid arguments: Cannot compare types %s and %s.", T0.stringof, T1.stringof));
 

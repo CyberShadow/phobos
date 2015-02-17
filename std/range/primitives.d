@@ -1,5 +1,5 @@
 /**
-This module is a submodule of $(LINK2 std_range_package.html, std.range).
+This module is a submodule of $(LINK2 std_range.html, std.range).
 
 It provides basic range functionality by defining several templates for testing
 whether a given object is a _range, and what kind of _range it is:
@@ -292,9 +292,12 @@ void put(R, E)(ref R r, E e)
     else static if (is(typeof(doPut(r, [e]))) && !isDynamicArray!R)
     {
         if (__ctfe)
-            doPut(r, [e]);
+        {
+            E[1] arr = [e];
+            doPut(r, arr[]);
+        }
         else
-            doPut(r, (&e)[0..1]);
+            doPut(r, (ref e) @trusted { return (&e)[0..1]; }(e));
     }
     //special case for char to string.
     else static if (isSomeChar!E && is(typeof(putChar(r, e))))
@@ -326,6 +329,13 @@ void put(R, E)(ref R r, E e)
     }
 }
 
+@safe pure nothrow @nogc unittest
+{
+    static struct R() { void put(in char[]) {} }
+    R!() r;
+    put(r, 'a');
+}
+
 //Helper function to handle chars as quickly and as elegantly as possible
 //Assumes r.put(e)/r(e) has already been tested
 private void putChar(R, E)(ref R r, E e)
@@ -350,17 +360,15 @@ if (isSomeChar!E)
     {
         enum w = wsCond && E.sizeof < wchar.sizeof;
         Select!(w, wchar, dchar) c = e;
-        if (__ctfe)
-            doPut(r, [c]);
-        else
-            doPut(r, (&c)[0..1]);
+        typeof(c)[1] arr = [c];
+        doPut(r, arr[]);
     }
     //Encode a wide char into a narrower string
     else static if (wsCond || csCond)
     {
         import std.utf : encode;
         /+static+/ Select!(wsCond, wchar[2], char[4]) buf; //static prevents purity.
-        doPut(r, buf.ptr[0 .. encode(buf, e)]); //the word ".ptr" added to enforce un-safety.
+        doPut(r, buf[0 .. encode(buf, e)]);
     }
     //Slowly encode a wide char into a series of narrower chars
     else static if (wcCond || ccCond)
@@ -379,6 +387,14 @@ pure unittest
 {
     auto f = delegate (const(char)[]) {};
     putChar(f, cast(dchar)'a');
+}
+
+
+@safe pure unittest
+{
+    static struct R() { void put(in char[]) {} }
+    R!() r;
+    putChar(r, 'a');
 }
 
 unittest
@@ -658,7 +674,8 @@ package template isNativeOutputRange(R, E)
         doPut(r, e);
     }));
 }
-//
+
+///
 @safe unittest
 {
     int[] r = new int[](4);
@@ -757,6 +774,7 @@ template isForwardRange(R)
     }));
 }
 
+///
 @safe unittest
 {
     static assert(!isForwardRange!(int));
@@ -769,15 +787,6 @@ Returns $(D true) if $(D R) is a bidirectional range. A bidirectional
 range is a forward range that also offers the primitives $(D back) and
 $(D popBack). The following code should compile for any bidirectional
 range.
-
-----
-R r;
-static assert(isForwardRange!R);           // is forward range
-r.popBack();                               // can invoke popBack
-auto t = r.back;                           // can get the back of the range
-auto w = r.front;
-static assert(is(typeof(t) == typeof(w))); // same type for front and back
-----
 
 The semantics of a bidirectional range (not checkable during
 compilation) are assumed to be the following ($(D r) is an object of
@@ -798,6 +807,18 @@ template isBidirectionalRange(R)
         auto w = r.front;
         static assert(is(typeof(t) == typeof(w)));
     }));
+}
+
+///
+unittest
+{
+    alias R = int[];
+    R r = [0,1];
+    static assert(isForwardRange!R);           // is forward range
+    r.popBack();                               // can invoke popBack
+    auto t = r.back;                           // can get the back of the range
+    auto w = r.front;
+    static assert(is(typeof(t) == typeof(w))); // same type for front and back
 }
 
 @safe unittest
@@ -834,29 +855,6 @@ either case, the range must either offer $(D length) or be
 infinite. The following code should compile for any random-access
 range.
 
-----
-// range is finite and bidirectional or infinite and forward.
-static assert(isBidirectionalRange!R ||
-              isForwardRange!R && isInfinite!R);
-
-R r = void;
-auto e = r[1]; // can index
-static assert(is(typeof(e) == typeof(r.front))); // same type for indexed and front
-static assert(!isNarrowString!R); // narrow strings cannot be indexed as ranges
-static assert(hasLength!R || isInfinite!R); // must have length or be infinite
-
-// $ must work as it does with arrays if opIndex works with $
-static if(is(typeof(r[$])))
-{
-    static assert(is(typeof(r.front) == typeof(r[$])));
-
-    // $ - 1 doesn't make sense with infinite ranges but needs to work
-    // with finite ones.
-    static if(!isInfinite!R)
-        static assert(is(typeof(r.front) == typeof(r[$ - 1])));
-}
-----
-
 The semantics of a random-access range (not checkable during
 compilation) are assumed to be the following ($(D r) is an object of
 type $(D R)): $(UL $(LI $(D r.opIndex(n)) returns a reference to the
@@ -889,6 +887,33 @@ template isRandomAccessRange(R)
                 static assert(is(typeof(r.front) == typeof(r[$ - 1])));
         }
     }));
+}
+
+///
+unittest
+{
+    alias R = int[];
+
+    // range is finite and bidirectional or infinite and forward.
+    static assert(isBidirectionalRange!R ||
+                  isForwardRange!R && isInfinite!R);
+
+    R r = [0,1];
+    auto e = r[1]; // can index
+    static assert(is(typeof(e) == typeof(r.front))); // same type for indexed and front
+    static assert(!isNarrowString!R); // narrow strings cannot be indexed as ranges
+    static assert(hasLength!R || isInfinite!R); // must have length or be infinite
+
+    // $ must work as it does with arrays if opIndex works with $
+    static if(is(typeof(r[$])))
+    {
+        static assert(is(typeof(r.front) == typeof(r[$])));
+
+        // $ - 1 doesn't make sense with infinite ranges but needs to work
+        // with finite ones.
+        static if(!isInfinite!R)
+            static assert(is(typeof(r.front) == typeof(r[$ - 1])));
+    }
 }
 
 @safe unittest

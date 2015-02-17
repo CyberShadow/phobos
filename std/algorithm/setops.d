@@ -1,6 +1,6 @@
 // Written in the D programming language.
 /**
-This is a submodule of $(LINK2 std_algorithm_package.html, std.algorithm).
+This is a submodule of $(LINK2 std_algorithm.html, std.algorithm).
 It contains generic algorithms that implement set operations.
 
 $(BOOKTABLE Cheat Sheet,
@@ -369,7 +369,7 @@ auto cartesianProduct(RR...)(RR ranges)
         }
         @property auto front()
         {
-            import std.algorithm : algoFormat; // FIXME
+            import std.algorithm.internal : algoFormat;
             import std.range : iota;
             return mixin(algoFormat("tuple(%(current[%d].front%|,%))",
                                     iota(0, current.length)));
@@ -443,7 +443,7 @@ auto cartesianProduct(R1, R2, RR...)(R1 range1, R2 range2, RR otherRanges)
      * one level of tuples so that a ternary cartesian product, for example,
      * returns 3-element tuples instead of nested 2-element tuples.
      */
-    import std.algorithm : algoFormat; // FIXME
+    import std.algorithm.internal : algoFormat;
     import std.algorithm.iteration : map;
     import std.range : iota;
 
@@ -595,7 +595,7 @@ void largestPartialIntersection
             sorted);
 }
 
-import std.algorithm : SortOutput; // FIXME
+import std.algorithm.sorting : SortOutput; // FIXME
 
 // largestPartialIntersectionWeighted
 /**
@@ -1227,6 +1227,8 @@ private:
 
 public:
     alias ElementType = CommonType!(staticMap!(.ElementType, Rs));
+    static assert(!is(CommonType!(staticMap!(.ElementType, Rs)) == void),
+        typeof(this).stringof ~ ": incompatible element types.");
 
     this(Rs rs)
     {
@@ -1255,7 +1257,7 @@ public:
         assert(false);
     }
 
-    @property ElementType front()
+    @property auto ref ElementType front()
     {
         assert(!empty);
         // Assume _crt is correct
@@ -1311,13 +1313,15 @@ SetUnion!(less, Rs) setUnion(alias less = "a < b", Rs...)
 
     int[] a = [ 1, 2, 4, 5, 7, 9 ];
     int[] b = [ 0, 1, 2, 4, 7, 8 ];
-    int[] c = [ 10 ];
+    double[] c = [ 10.5 ];
 
+    static assert(isForwardRange!(typeof(setUnion(a, b))));
     assert(setUnion(a, b).length == a.length + b.length);
     assert(equal(setUnion(a, b), [0, 1, 1, 2, 2, 4, 4, 5, 7, 7, 8, 9][]));
     assert(equal(setUnion(a, c, b),
-                    [0, 1, 1, 2, 2, 4, 4, 5, 7, 7, 8, 9, 10][]));
-
-    static assert(isForwardRange!(typeof(setUnion(a, b))));
+                    [0, 1, 1, 2, 2, 4, 4, 5, 7, 7, 8, 9, 10.5][]));
+    auto u = setUnion(a, b);
+    u.front--;
+    assert(equal(u, [-1, 1, 1, 2, 2, 4, 4, 5, 7, 7, 8, 9][]));
 }
 
