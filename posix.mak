@@ -116,7 +116,7 @@ ifeq (,$(findstring win,$(OS)))
 	ifeq ($(BUILD),debug)
 		CFLAGS += -g
 	else
-		CFLAGS += -O3
+		CFLAGS += -g
 	endif
 else
 	ifeq ($(OS),win32)
@@ -124,7 +124,7 @@ else
 		ifeq ($(BUILD),debug)
 			CFLAGS += -g
 		else
-			CFLAGS += -O
+			CFLAGS += -g
 		endif
 	else # win64/win32coff
 		OUTFILEFLAG = /Fo
@@ -143,7 +143,7 @@ override DFLAGS+=-conf= -I$(DRUNTIME_PATH)/import $(DMDEXTRAFLAGS) -w -de -previ
 ifeq ($(BUILD),debug)
 override DFLAGS += -g -debug
 else
-override DFLAGS += -O -release
+override DFLAGS += -g
 endif
 
 ifdef ENABLE_COVERAGE
