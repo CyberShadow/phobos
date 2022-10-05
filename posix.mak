@@ -114,7 +114,7 @@ ifeq (,$(findstring win,$(OS)))
 	CFLAGS=$(MODEL_FLAG) -fPIC -DHAVE_UNISTD_H
 	NODEFAULTLIB += -L-lpthread -L-lm
 	ifeq ($(BUILD),debug)
-		CFLAGS += -g
+		CFLAGS += -g -L-g
 	else
 		CFLAGS += -g
 	endif
@@ -122,7 +122,7 @@ else
 	ifeq ($(OS),win32)
 		CFLAGS=-DNO_snprintf
 		ifeq ($(BUILD),debug)
-			CFLAGS += -g
+			CFLAGS += -g -L-g
 		else
 			CFLAGS += -g
 		endif
@@ -141,9 +141,9 @@ endif
 DFLAGS=
 override DFLAGS+=-conf= -I$(DRUNTIME_PATH)/import $(DMDEXTRAFLAGS) -w -de -preview=dip1000 -preview=dtorfields $(MODEL_FLAG) $(PIC) -transition=complex
 ifeq ($(BUILD),debug)
-override DFLAGS += -g -debug
+override DFLAGS += -g -L-g -debug
 else
-override DFLAGS += -g
+override DFLAGS += -g -L-g
 endif
 
 ifdef ENABLE_COVERAGE
