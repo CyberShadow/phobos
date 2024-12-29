@@ -2815,10 +2815,18 @@ void kill(Pid pid, int codeOrSignal)
     else version (Posix)
     {
         import core.sys.posix.signal : kill;
-        if (pid.osHandle == Pid.invalid)
-            throw new ProcessException("Pid is invalid");
-        if (pid.osHandle == Pid.terminated)
-            throw new ProcessException("Pid is already terminated");
+        if (pid.osHandle <= 0)
+        {
+            switch (pid.osHandle)
+            {
+                case Pid.invalid:
+                    throw new ProcessException("Pid is invalid");
+                case Pid.terminated:
+                    throw new ProcessException("Pid is already terminated");
+                default:
+                    assert(false, "Invalid Pid.osHandle value"); // Should not be possible
+            }
+        }
         if (kill(pid.osHandle, codeOrSignal) == -1)
             throw ProcessException.newFromErrno();
     }
